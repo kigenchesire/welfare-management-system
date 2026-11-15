@@ -17,6 +17,9 @@
         <div class="fw-semibold text-truncate d-none d-sm-block">{{ $s['group_name'] }}</div>
 
         <div class="ms-auto d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-outline-primary d-none" data-install-app title="Install this system as an app on this device">
+                <i class="bi bi-download"></i><span class="d-none d-md-inline ms-1">Install app</span>
+            </button>
             <div class="dropdown">
                 <button class="btn btn-light position-relative" data-bs-toggle="dropdown" aria-label="Notifications">
                     <i class="bi bi-bell"></i>
@@ -91,7 +94,7 @@
 <script src="https://cdn.jsdelivr.net/npm/datatables.net@1.13.8/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/datatables.net-bs5@1.13.8/js/dataTables.bootstrap5.min.js"></script>
 @stack('scripts-before')
-<script src="{{ asset('js/app.js') }}?v=1"></script>
+<script src="{{ asset('js/app.js') }}?v=2"></script>
 @stack('scripts')
 </body>
 </html>

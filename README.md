@@ -85,6 +85,20 @@ Contribution amounts apply to **new** cases. Existing cases keep the amount they
 
 The public homepage and online registration are **disabled for now**: opening the site goes straight to the login page, and members are registered by the Secretary (Members > Add member). The code is kept. To switch it back on, follow the comment at the top of `routes/web.php` (restore the two `HomeController` routes, remove the redirect) and uncomment the "website" links marked `Public website disabled for now` in the login and layout views.
 
+### Installing as an app (phone and computer)
+
+The system is a Progressive Web App (PWA), so it can be installed like an app with its own icon and window. Nothing is published to an app store.
+
+- **Android (Chrome, Samsung Internet, Edge):** tap **Install app** on the login page or top bar, or use the browser menu > *Install app* / *Add to Home screen*.
+- **Windows, Mac, Linux, ChromeOS (Chrome or Edge):** click **Install app**, or the install icon at the right of the address bar. The app then opens in its own window and appears in the Start menu or Applications.
+- **iPhone / iPad (Safari):** tap **Install app** for instructions, or Share > *Add to Home Screen*.
+
+The app name, icon and colour come from System Settings: the uploaded **logo** is used for the icon, or the short name's initials on the primary colour if there is no logo. Changing them updates the icon for new installs, and for existing installs after the browser refreshes the manifest.
+
+**Requirements:** installing only works over **HTTPS** (or on `localhost` when testing). On cPanel, enable the free AutoSSL / Let's Encrypt certificate and set `APP_URL=https://...`.
+
+**Privacy:** pages with member or financial data are never stored on the device. Without a connection the app shows an "offline" notice. Only styles, scripts and icons are cached. After changing `public/css/app.css` or `public/js/app.js`, raise `VERSION` in `public/sw.js` so installed apps fetch the new files.
+
 ## 6. How the money works
 
 - Every member has a **wallet**. Its balance changes **only** through `App\Services\WalletService`. Each change runs in a database transaction, locks the wallet row and writes one immutable `wallet_transactions` row with the balance before and after. Ledger rows cannot be edited or deleted.

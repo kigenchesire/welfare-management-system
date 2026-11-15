@@ -11,6 +11,7 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MemberPortalController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PwaController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\WalletController;
@@ -31,6 +32,11 @@ use Illuminate\Support\Facades\Route;
 // Route::get('/', [HomeController::class, 'index'])->name('home');
 // Route::post('/register', [HomeController::class, 'register'])->middleware('throttle:10,1')->name('register');
 Route::redirect('/', '/login')->name('home');
+
+// Installable app (PWA): manifest, icons and offline page, built from System Settings.
+Route::get('/manifest.webmanifest', [PwaController::class, 'manifest'])->name('pwa.manifest');
+Route::get('/pwa/icon-{size}.png', [PwaController::class, 'icon'])->whereNumber('size')->name('pwa.icon');
+Route::get('/offline', [PwaController::class, 'offline'])->name('pwa.offline');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');

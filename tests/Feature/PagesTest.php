@@ -81,6 +81,31 @@ class PagesTest extends TestCase
         }
     }
 
+    public function test_app_is_installable_and_branded_from_settings(): void
+    {
+        \App\Support\Settings::set('group_name', 'Tumaini Welfare');
+        \App\Support\Settings::set('short_name', 'TW');
+        \App\Support\Settings::set('primary_color', '#123456');
+
+        $m = $this->get(route('pwa.manifest'))->assertOk()->assertHeader('content-type', 'application/manifest+json')->json();
+        $this->assertSame('Tumaini Welfare', $m['name']);
+        $this->assertSame('TW', $m['short_name']);
+        $this->assertSame('#123456', $m['theme_color']);
+        $this->assertSame('standalone', $m['display']);
+        $this->assertNotEmpty(collect($m['icons'])->firstWhere('sizes', '512x512'));
+        $this->assertNotEmpty(collect($m['icons'])->firstWhere('purpose', 'maskable'));
+
+        foreach ([180, 192, 512] as $size) {
+            $png = $this->get(route('pwa.icon', ['size' => $size]))->assertOk()->assertHeader('content-type', 'image/png')->getContent();
+            $info = getimagesizefromstring($png);
+            $this->assertSame([$size, $size], [$info[0], $info[1]]);
+        }
+        $this->get(route('pwa.icon', ['size' => 999]))->assertNotFound();
+        $this->get(route('pwa.offline'))->assertOk()->assertSee('You are offline');
+        $this->get('/login')->assertOk()->assertSee(route('pwa.manifest'), false)->assertSee('data-install-app', false);
+        $this->assertFileExists(public_path('sw.js'));
+    }
+
     public function test_settings_update_shows_on_login_page(): void
     {
         $this->actingAs($this->admin())->put(route('admin.settings.update'), [

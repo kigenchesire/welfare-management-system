@@ -22,6 +22,10 @@
         <button class="btn btn-primary w-100">Sign in</button>
     </form>
 
+    <button type="button" class="btn btn-outline-primary w-100 mt-2 d-none" data-install-app>
+        <i class="bi bi-download me-1"></i>Install app on this device
+    </button>
+
     <p class="small text-muted mt-4 mb-0">
         Forgot your password? Contact the Secretary at {{ $s['phone'] }} to have it reset.
         {{-- Public website disabled for now:
