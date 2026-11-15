@@ -14,7 +14,6 @@
         <div class="mb-3">
             <label class="form-label" for="password">Password</label>
             <input type="password" class="form-control" id="password" name="password" maxlength="6" required autocomplete="current-password">
-            <div class="form-text">Passwords are up to 6 characters.</div>
         </div>
         <div class="form-check mb-3">
             <input class="form-check-input" type="checkbox" name="remember" id="remember" value="1">
