@@ -74,7 +74,7 @@ All new accounts (staff and approved members) start with the password **`123456`
 Sign in as Administrator and open:
 
 - **System Settings > General**: name, short name, logo, favicon, description, address, phone, email, website, primary/secondary colours, registration information.
-- **System Settings > Financial**: contribution amount per case type (parent, parent-in-law, self, spouse, child), currency, payment method name, Paybill number, account-number instructions, payment steps, member number prefix, low-balance alert level, and two options:
+- **System Settings > Financial**: contribution amount per case type (parent, parent-in-law, self, spouse, child), **office expenditure** and **transport** amounts taken from each member's payment per case (default 100 and 50), currency, payment method name, Paybill number, account-number instructions, payment steps, member number prefix, low-balance alert level, and two options:
   - *Use new deposits to settle outstanding invoices automatically* (on by default)
 - **System Settings > SMS Gateway**: enable SMS, provider, API URL, username, API key, Sender ID, message templates, and a test-SMS button.
 - **Website Management**: hero text and photo, about us, mission, vision, objectives, values, "how it works" texts, representative name, photo, title and bio, social links, footer text, plus a gallery of extra photographs.
@@ -111,56 +111,7 @@ The app name, icon and colour come from System Settings: the uploaded **logo** i
 - **Who is invoiced:** every active member, **including the member who reported the bereavement**. Only when the member themself has died (a "self" case) are they not invoiced.
 - **Paying for a specific case:** on the case page, **Record payment** (or **Pay** on a member's row) records a Paybill deposit against that case. The money is credited to the wallet and used first for that member's invoice on this case, fully or partly; anything extra stays in the wallet (or settles other invoices if auto-settle is on).
 - **Reminders:** on the case page, **Remind unpaid** sends an SMS to every member who has not fully paid that case, each with their own outstanding amount; **Remind** on a row reminds one member. The text is set in System Settings > SMS Gateway (*case contribution reminder*). Members also get a dashboard notification.
-- **Invoice new members** on a case only invoices members who don't already have an invoice for it, so running it again is safe.
-- **Cancelling** a case or invoice refunds whatever was deducted, through refund entries in the ledger.
-- **Mistakes** are fixed with **payment reversals** or **adjustments**, never by deleting records. A debit that would make a balance negative needs an explicit "authorise negative balance" tick.
-- **Financial overview** reports wallet balances as a **liability** (money held for members), kept separate from contributions actually collected.
-- Forms that change data carry a one-time token, so double clicks or refreshes cannot post the same thing twice.
-
-## 7. Roles
-
-| Role | Can do |
-|---|---|
-| Administrator | Everything, including settings, users, roles and permissions, and audit logs |
-| Chairperson | View members, cases, invoices, wallets, financial overview, all reports, audit logs |
-| Secretary | Register/approve/reject/edit/suspend members, manage beneficiaries (the only role besides Admin), create/close/cancel cases, announcements, website content |
-| Treasurer | Record deposits, reverse payments, wallets, adjustments, custom invoices, financial reports |
-| Member | Own profile, beneficiaries (read only), wallet statement, invoices, payments and receipts, welfare cases |
-
-Permissions are enforced on the server for every route. Role permissions can be changed under Administration > Roles & Permissions. Members' pages only ever load the signed-in member's own records.
-
-## 8. SMS
-
-`App\Services\SmsService` is the only class that talks to an SMS gateway. It supports **Africa's Talking** and a **generic JSON HTTP** gateway. To add another provider, add a branch in `SmsService::dispatch()`. Every message is logged in **SMS Logs** with its status. Gateway failures never undo a payment or a case. Bulk messages (new case, announcements) are sent after the page has responded.
-
-Credentials can be set in System Settings or in `.env` (`SMS_ENABLED`, `SMS_API_URL`, `SMS_API_KEY`, `SMS_USERNAME`, `SMS_SENDER_ID`). Settings saved in the admin panel take priority.
-
-## 9. Reports
-
-Reports > choose a report. Every report has date filters, search, on-screen DataTables, **Print**, **PDF** and **Excel** export:
-member register, active/inactive members, registrations, beneficiary register, welfare cases, contributions per case, member payment status, outstanding contributions, wallet balances, wallet transactions, deposits, custom invoices, financial summary.
-
-## 10. Backups
-
-Back up the database and the `storage/app/public` folder (uploaded images) regularly, for example a daily cPanel backup or:
-
-```bash
-mysqldump -u USER -p DB_NAME > wms-$(date +%F).sql
-```
-
-## 11. Tests
-
-Tests need a separate empty MySQL database named `welfare_system_test` (see `phpunit.xml`):
-
-```bash
-php artisan test
-```
-
-They cover the registration and approval workflow, the password rule, beneficiary limits and permissions, case invoicing with full, partial and zero balances, duplicate prevention, deposits, reversals, cancellations and refunds, ledger consistency, role authorisation, member data isolation, and every page and report export.
-
-## 12. Security notes
-
-- `APP_DEBUG=false` in production. The debug page must never be public.
-- Laravel 10 reached end of security support in February 2025. This project uses Laravel 10 as specified; `composer audit` lists advisories that are only fixed in Laravel 12/13. The project avoids the affected features: no signed URLs, email validation uses `email:filter`, and debug is off in production. Plan an upgrade to a supported Laravel version.
-- Uploaded images are restricted to JPG/PNG/WEBP up to 3 MB (favicon 512 KB).
-- The login form is rate-limited (5 failed attempts per minute per username + IP).
+- **Office and transport shares:** every member payment on a case is shared out in this order: first the **office expenditure** amount (default 100), then **transport** (default 50), and the rest goes to the **welfare fund**. For example, on a 600 case a member who pays 600 gives 100 / 50 / 450; one who has paid 120 so far gives 100 / 20 / 0. The amounts are set in System Settings > Financial and copied onto each case when it is raised, so changing them later does not alter existing cases (cases raised before this feature have 0 for both).
+- **Case page, "Where the money goes":** expected, collected, disbursed and still available for welfare, transport and office money.
+- **Disbursements:** on the case page, **Record disbursement** pays money out of the case's welfare fund or transport money: recipient, phone, amount, date, payment reference and remarks. It can never exceed what has been collected and not yet paid out. A disbursement entered in error is **voided** (kept on record with the reason). A case with money already paid out cannot be cancelled until its disbursements are voided.
+- **Office account** (Finance > Office Account): its own account name and ID, editable. The balance is the office share collected from all cases, plus **top-ups** from other sources, minus **expenses**. Expenses are deducted immediately and cannot take the balance below zero. Entries are never edited or deleted; a mistake is corrected with **Reverse**, which posts the opposite entry. The statement shows a running balance, with case income shown per case per day. If a case is cancelled, its office share leaves the account again.

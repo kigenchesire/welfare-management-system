@@ -23,6 +23,9 @@ class Permissions
             'deposits.record' => 'Record deposits and reverse payments',
             'adjustments.manage' => 'Post wallet adjustments',
             'finance.view' => 'View financial overview',
+            'office.view' => 'View the office expenditure account',
+            'office.manage' => 'Top up the office account and record office expenses',
+            'disbursements.manage' => 'Record and void welfare case disbursements',
         ],
         'Reports' => [
             'reports.members' => 'Member reports',
@@ -52,7 +55,7 @@ class Permissions
         return [
             'Administrator' => self::names(),
             'Chairperson' => [
-                'members.view', 'cases.view', 'invoices.view', 'wallets.view', 'finance.view',
+                'members.view', 'cases.view', 'invoices.view', 'wallets.view', 'finance.view', 'office.view',
                 'reports.members', 'reports.welfare', 'reports.financial', 'sms.view', 'audit.view',
             ],
             'Secretary' => [
@@ -62,7 +65,8 @@ class Permissions
             ],
             'Treasurer' => [
                 'members.view', 'cases.view', 'invoices.view', 'invoices.manage', 'wallets.view',
-                'deposits.record', 'adjustments.manage', 'finance.view', 'reports.financial', 'reports.welfare', 'sms.view',
+                'deposits.record', 'adjustments.manage', 'finance.view',
+                'office.view', 'office.manage', 'disbursements.manage', 'reports.financial', 'reports.welfare', 'sms.view',
             ],
             'Member' => [],
         ];

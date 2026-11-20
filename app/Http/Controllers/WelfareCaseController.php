@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CaseDisbursement;
 use App\Models\Member;
 use App\Models\WelfareCase;
+use App\Services\DisbursementService;
 use App\Services\PaymentService;
 use App\Services\WelfareCaseService;
 use App\Support\Settings;
@@ -58,6 +60,8 @@ class WelfareCaseController extends Controller
         return view('cases.show', [
             'case' => $case,
             'summary' => $case->summary(),
+            'funds' => $case->funds(),
+            'disbursements' => $case->disbursements()->with(['recorder', 'voider'])->latest('disbursement_date')->latest('id')->get(),
             'invoices' => $case->invoices()->with('member')->get()->sortBy(fn ($i) => $i->member->full_name),
         ]);
     }
@@ -97,6 +101,30 @@ class WelfareCaseController extends Controller
         return redirect()->route('cases.show', $case)->with('success',
             'Payment '.$payment->receipt_no.' of '.money($payment->amount).' recorded for '.$member->full_name.'. '
             .($invoice->outstanding > 0 ? 'Still outstanding on this case: '.money($invoice->outstanding).'.' : 'Their contribution for this case is fully paid.'));
+    }
+
+    public function disburse(Request $request, WelfareCase $case, DisbursementService $disbursements)
+    {
+        $data = $request->validate([
+            'fund' => ['required', 'in:'.implode(',', array_keys(CaseDisbursement::FUNDS))],
+            'recipient' => ['required', 'string', 'max:150'],
+            'recipient_phone' => ['nullable', 'string', 'max:30'],
+            'amount' => ['required', 'numeric', 'min:1', 'max:10000000'],
+            'disbursement_date' => ['required', 'date', 'before_or_equal:today'],
+            'payment_ref' => ['nullable', 'string', 'max:60'],
+            'remarks' => ['nullable', 'string', 'max:250'],
+        ]);
+        $d = $disbursements->record($case, $data);
+
+        return redirect()->route('cases.show', $case)->with('success', 'Disbursement '.$d->reference.' of '.money($d->amount).' to '.$d->recipient.' recorded.');
+    }
+
+    public function voidDisbursement(Request $request, CaseDisbursement $disbursement, DisbursementService $disbursements)
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'max:250']]);
+        $disbursements->void($disbursement, $data['reason']);
+
+        return back()->with('success', 'Disbursement '.$disbursement->reference.' voided. The money is available on the case again.');
     }
 
     public function remind(Request $request, WelfareCase $case)

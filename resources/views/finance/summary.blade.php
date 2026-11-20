@@ -30,6 +30,13 @@
     <div class="col-md-4">@include('partials.stat', ['label' => 'Total collected (all invoices)', 'value' => money($summary['total_collected'])])</div>
 </div>
 
+<h2 class="h6 text-muted text-uppercase fw-semibold">Case funds (all dates)</h2>
+<div class="row g-3 mb-4">
+    <div class="col-md-4">@include('partials.stat', ['label' => 'Welfare fund collected', 'value' => money($summary['fund_welfare']), 'hint' => 'Disbursed '.money($summary['welfare_disbursed']).' · held '.money($summary['welfare_held'])])</div>
+    <div class="col-6 col-md-4">@include('partials.stat', ['label' => 'Transport collected', 'value' => money($summary['fund_transport']), 'hint' => 'Disbursed '.money($summary['transport_disbursed']).' · held '.money($summary['transport_held'])])</div>
+    <div class="col-6 col-md-4">@include('partials.stat', ['label' => 'Office account balance', 'value' => money($summary['office_balance']), 'class' => 'text-brand', 'hint' => 'From cases '.money($summary['fund_office']).' · top-ups '.money($summary['office_topups']).' · expenses '.money($summary['office_expenses'])])</div>
+</div>
+
 <h2 class="h6 text-muted text-uppercase fw-semibold">Custom invoices</h2>
 <div class="row g-3 mb-4">
     <div class="col-md-4">@include('partials.stat', ['label' => 'Raised', 'value' => money($summary['custom_invoiced'])])</div>

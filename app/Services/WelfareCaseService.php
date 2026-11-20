@@ -61,6 +61,9 @@ class WelfareCaseService
                 'bereavement_date' => $bereavementDate,
                 'remarks' => $remarks,
                 'contribution_amount' => $amount,
+                // Taken first from each member's payment: office, then transport, the rest is welfare.
+                'office_share' => Settings::money('office_share_per_case'),
+                'transport_share' => Settings::money('transport_share_per_case'),
                 'status' => 'open',
                 'created_by' => auth()->id(),
             ]);
@@ -182,6 +185,9 @@ class WelfareCaseService
             $case = WelfareCase::lockForUpdate()->find($case->id);
             if ($case->status === 'cancelled') {
                 throw ValidationException::withMessages(['case' => 'This case is already cancelled.']);
+            }
+            if ($case->disbursements()->active()->exists()) {
+                throw ValidationException::withMessages(['reason' => 'Money has already been disbursed for this case. Void the disbursements first, then cancel the case.']);
             }
             $old = $case->status;
 

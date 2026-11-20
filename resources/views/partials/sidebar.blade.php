@@ -43,13 +43,14 @@
             @can('invoices.view'){!! $link('invoices.index', 'Invoices', 'receipt', ['type' => 'welfare'], 'invoices.index|invoices.show') !!}@endcan
         @endcanany
 
-        @canany(['wallets.view', 'deposits.record', 'finance.view', 'invoices.manage'])
+        @canany(['wallets.view', 'deposits.record', 'finance.view', 'invoices.manage', 'office.view'])
             <div class="sidebar-section">Finance</div>
             @can('wallets.view'){!! $link('wallets.index', 'Member Wallets', 'wallet2', [], 'wallets.*') !!}@endcan
             @can('deposits.record'){!! $link('payments.create', 'Record Deposit', 'plus-circle') !!}@endcan
             @can('wallets.view'){!! $link('payments.index', 'Deposits', 'cash-coin', [], 'payments.index|payments.show') !!}@endcan
             @can('wallets.view'){!! $link('transactions.index', 'Transactions', 'arrow-left-right') !!}@endcan
             @can('invoices.manage'){!! $link('invoices.create', 'Custom Invoices', 'file-earmark-plus') !!}@endcan
+            @can('office.view'){!! $link('office.index', 'Office Account', 'building') !!}@endcan
             @can('finance.view'){!! $link('finance.summary', 'Financial Overview', 'graph-up') !!}@endcan
         @endcanany
 

@@ -7,6 +7,8 @@
 @php
     $canPay = $case->status !== 'cancelled' && auth()->user()->can('deposits.record');
     $canRemind = $case->status !== 'cancelled' && (auth()->user()->can('cases.manage') || auth()->user()->can('deposits.record'));
+    $canDisburse = $case->status !== 'cancelled' && auth()->user()->can('disbursements.manage');
+    $perMember = \App\Models\WelfareCase::split((float) $case->contribution_amount, (float) $case->office_share, (float) $case->transport_share);
     $unpaid = $invoices->filter(fn ($i) => in_array($i->status, ['unpaid', 'partially_paid'], true) && $i->outstanding > 0);
 @endphp
 @section('actions')
@@ -57,6 +59,48 @@
         <div class="progress-bar bg-brand" style="width: {{ $pct }}%"></div>
     </div>
 @endif
+
+<div class="card mb-3">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span>Where the money goes</span>
+        <span class="small text-muted">Each member's {{ money($case->contribution_amount) }}: office {{ money($perMember['office']) }}, transport {{ money($perMember['transport']) }}, welfare {{ money($perMember['welfare']) }}. Office and transport are taken first.</span>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table mb-0">
+                <thead><tr><th>Fund</th><th class="text-end">Expected</th><th class="text-end">Collected</th><th class="text-end">Disbursed</th><th class="text-end">Available</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Welfare</strong><div class="small text-muted">For the bereaved family</div></td>
+                        <td class="text-end amount">{{ number_format($funds['welfare_due'], 2) }}</td>
+                        <td class="text-end amount fw-semibold text-brand">{{ number_format($funds['welfare'], 2) }}</td>
+                        <td class="text-end amount">{{ number_format($funds['welfare_disbursed'], 2) }}</td>
+                        <td class="text-end amount fw-semibold">{{ number_format($funds['welfare_available'], 2) }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Transport</strong></td>
+                        <td class="text-end amount">{{ number_format($funds['transport_due'], 2) }}</td>
+                        <td class="text-end amount fw-semibold">{{ number_format($funds['transport'], 2) }}</td>
+                        <td class="text-end amount">{{ number_format($funds['transport_disbursed'], 2) }}</td>
+                        <td class="text-end amount fw-semibold">{{ number_format($funds['transport_available'], 2) }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Office expenditure</strong><div class="small text-muted">Goes to the office account @can('office.view')(<a href="{{ route('office.index') }}">view</a>)@endcan</div></td>
+                        <td class="text-end amount">{{ number_format($funds['office_due'], 2) }}</td>
+                        <td class="text-end amount fw-semibold">{{ number_format($funds['office'], 2) }}</td>
+                        <td class="text-end text-muted">-</td>
+                        <td class="text-end text-muted">-</td>
+                    </tr>
+                </tbody>
+                <tfoot><tr class="fw-semibold"><td>Total</td>
+                    <td class="text-end amount">{{ number_format($summary['expected'], 2) }}</td>
+                    <td class="text-end amount">{{ number_format($summary['collected'], 2) }}</td>
+                    <td class="text-end amount">{{ number_format($funds['welfare_disbursed'] + $funds['transport_disbursed'], 2) }}</td>
+                    <td></td></tr></tfoot>
+            </table>
+        </div>
+    </div>
+</div>
 
 <div class="card mb-3">
     <div class="card-header">Case details</div>
@@ -160,6 +204,102 @@
 </div>
 @endif
 
+<div class="card mt-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Disbursements</span>
+        @if($canDisburse)
+            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#disburseModal">Record disbursement</button>
+        @endif
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead><tr><th>Date</th><th>Ref</th><th>Fund</th><th>Recipient</th><th class="text-end">Amount</th><th>Remarks</th><th>Status</th>@if($canDisburse)<th></th>@endif</tr></thead>
+                <tbody>
+                @forelse($disbursements as $d)
+                    <tr class="{{ $d->status === 'voided' ? 'text-muted' : '' }}">
+                        <td>{{ $d->disbursement_date->format('d M Y') }}</td>
+                        <td>{{ $d->reference }}@if($d->payment_ref)<div class="small text-muted">{{ $d->payment_ref }}</div>@endif</td>
+                        <td>{{ $d->fund_label }}</td>
+                        <td>{{ $d->recipient }}@if($d->recipient_phone)<div class="small text-muted">{{ $d->recipient_phone }}</div>@endif</td>
+                        <td class="text-end amount">{{ number_format($d->amount, 2) }}</td>
+                        <td class="small">{{ $d->remarks ?: '-' }}<div class="text-muted">by {{ $d->recorder?->name }}</div></td>
+                        <td>
+                            @if($d->status === 'voided')
+                                <span class="badge text-bg-secondary">Void</span>
+                                <div class="small">{{ $d->void_reason }}</div>
+                            @else
+                                <span class="badge text-bg-success">Paid out</span>
+                            @endif
+                        </td>
+                        @if($canDisburse)
+                            <td class="text-end">
+                                @if($d->status === 'active')
+                                    <form method="POST" action="{{ route('disbursements.void', $d) }}" class="d-flex gap-1 justify-content-end" data-confirm="Void disbursement {{ $d->reference }}? The money becomes available on the case again.">
+                                        @csrf @include('partials.submission')
+                                        <input type="text" name="reason" class="form-control form-control-sm" style="max-width: 140px;" placeholder="Reason" required maxlength="250">
+                                        <button class="btn btn-sm btn-outline-danger">Void</button>
+                                    </form>
+                                @endif
+                            </td>
+                        @endif
+                    </tr>
+                @empty
+                    <tr><td colspan="{{ $canDisburse ? 8 : 7 }}" class="empty-state">No money has been disbursed for this case yet.</td></tr>
+                @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@if($canDisburse)
+<div class="modal fade" id="disburseModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" action="{{ route('cases.disburse', $case) }}">
+            @csrf @include('partials.submission')
+            <div class="modal-header"><h5 class="modal-title">Disburse money for {{ $case->case_no }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label" for="dFund">Pay from</label>
+                    <select name="fund" id="dFund" class="form-select" required>
+                        <option value="welfare" @selected(old('fund', 'welfare') === 'welfare')>Welfare fund ({{ money($funds['welfare_available']) }} available)</option>
+                        <option value="transport" @selected(old('fund') === 'transport')>Transport ({{ money($funds['transport_available']) }} available)</option>
+                    </select>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-7">
+                        <label class="form-label" for="dRecipient">Recipient</label>
+                        <input type="text" name="recipient" id="dRecipient" class="form-control" maxlength="150" required value="{{ old('recipient', $case->category === 'self' ? '' : $case->member->full_name) }}">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label" for="dPhone">Recipient phone <span class="text-muted small">(optional)</span></label>
+                        <input type="text" name="recipient_phone" id="dPhone" class="form-control" maxlength="30" value="{{ old('recipient_phone') }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" for="dAmount">Amount received ({{ $s['currency'] }})</label>
+                        <input type="number" step="0.01" min="1" name="amount" id="dAmount" class="form-control" required value="{{ old('amount') }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" for="dDate">Date</label>
+                        <input type="date" name="disbursement_date" id="dDate" class="form-control" required max="{{ date('Y-m-d') }}" value="{{ old('disbursement_date', date('Y-m-d')) }}">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="dRef">Payment reference <span class="text-muted small">(optional, e.g. M-Pesa code or cheque no.)</span></label>
+                        <input type="text" name="payment_ref" id="dRef" class="form-control text-uppercase" maxlength="60" value="{{ old('payment_ref') }}">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="dRemarks">Remarks <span class="text-muted small">(optional)</span></label>
+                        <textarea name="remarks" id="dRemarks" class="form-control" rows="2" maxlength="250">{{ old('remarks') }}</textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-primary">Save disbursement</button></div>
+        </form>
+    </div></div>
+</div>
+@endif
+
 <div class="modal fade" id="cancelModal" tabindex="-1">
     <div class="modal-dialog"><div class="modal-content">
         <form method="POST" action="{{ route('cases.cancel', $case) }}" data-confirm="Cancel this case? This cannot be undone.">
@@ -195,5 +335,11 @@
     @endif
 })();
 </script>
+@endpush
+@endif
+
+@if($canDisburse && $errors->any() && old('recipient'))
+@push('scripts')
+<script>bootstrap.Modal.getOrCreateInstance(document.getElementById('disburseModal')).show();</script>
 @endpush
 @endif

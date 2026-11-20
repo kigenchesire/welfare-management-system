@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\Beneficiary;
+use App\Models\CaseDisbursement;
 use App\Models\Invoice;
 use App\Models\Member;
+use App\Models\OfficeTransaction;
 use App\Models\Payment;
 use App\Models\WalletTransaction;
 use App\Models\WelfareCase;
@@ -25,12 +27,16 @@ class ReportService
         'beneficiaries' => ['Beneficiary register', 'members', 'Registered beneficiaries for every member.'],
         'cases' => ['Welfare case report', 'welfare', 'All welfare cases with collection progress.'],
         'case-contributions' => ['Contribution report per case', 'welfare', 'Each member\'s contribution for a selected case.'],
+        'case-funds' => ['Case fund breakdown', 'welfare', 'Welfare, transport and office money collected, disbursed and still held per case.'],
+        'disbursements' => ['Case disbursement report', 'welfare', 'Money paid out for welfare cases: recipient, amount and date.'],
         'payment-status' => ['Member payment status', 'welfare', 'Invoiced, paid and outstanding per member.'],
         'outstanding' => ['Outstanding contributions', 'welfare', 'Invoices that are unpaid or partially paid.'],
         'wallet-balances' => ['Member wallet balances', 'financial', 'Current wallet balance per member.'],
         'wallet-transactions' => ['Wallet transaction history', 'financial', 'Full wallet ledger.'],
         'deposits' => ['Deposit report', 'financial', 'Deposits recorded by the Treasurer.'],
         'custom-invoices' => ['Custom invoice report', 'financial', 'Non-welfare invoices (airtime, lunch, ...).'],
+        'office-statement' => ['Office account statement', 'financial', 'Office income from cases, top-ups and expenses with a running balance.'],
+        'office-expenses' => ['Office expense report', 'financial', 'Office expenses by date, category and payee.'],
         'financial-summary' => ['Financial summary', 'financial', 'Totals for deposits, collections, liabilities and adjustments.'],
     ];
 
@@ -47,6 +53,11 @@ class ReportService
             'beneficiaries' => $this->beneficiaries($range(Beneficiary::with('member'), 'created_at')),
             'cases' => $this->cases($range(WelfareCase::with('member'), 'bereavement_date')->when($r->input('status'), fn ($q, $s) => $q->where('status', $s))),
             'case-contributions' => $this->caseContributions($r->input('case_id')),
+            'case-funds' => $this->caseFunds($range(WelfareCase::where('status', '!=', 'cancelled'), 'bereavement_date')),
+            'disbursements' => $this->disbursements($range(CaseDisbursement::with(['welfareCase', 'recorder']), 'disbursement_date')
+                ->when($r->input('fund'), fn ($q, $f) => $q->where('fund', $f))->when($r->input('status'), fn ($q, $st) => $q->where('status', $st))),
+            'office-statement' => $this->officeStatement($from, $to, $r->input('type')),
+            'office-expenses' => $this->officeExpenses($range(OfficeTransaction::with(['recorder', 'reversal'])->where('type', 'expense'), 'transaction_date')),
             'payment-status' => $this->paymentStatus($from, $to),
             'outstanding' => $this->outstanding($range(Invoice::open()->with('member'), 'invoice_date')->when($r->input('type'), fn ($q, $t) => $q->where('type', $t))),
             'wallet-balances' => $this->walletBalances(),
@@ -118,18 +129,22 @@ class ReportService
 
     private function cases($q): array
     {
-        $rows = $q->orderByDesc('bereavement_date')->get()->map(function ($c) {
+        $cases = $q->orderByDesc('bereavement_date')->get();
+        $funds = WelfareCase::fundsFor($cases->pluck('id')->all());
+        $rows = $cases->map(function ($c) use ($funds) {
             $s = $c->summary();
+            $f = $funds[$c->id];
 
             return [
                 $c->case_no, $c->bereavement_date->format('Y-m-d'), $c->member->full_name, $c->deceased_name, $c->category_label,
                 number_format((float) $c->contribution_amount, 2), $s['invoices'], number_format($s['expected'], 2),
-                number_format($s['collected'], 2), number_format($s['outstanding'], 2), $c->status_label,
+                number_format($s['collected'], 2), number_format($f['office'], 2), number_format($f['transport'], 2), number_format($f['welfare'], 2),
+                number_format($f['welfare_disbursed'] + $f['transport_disbursed'], 2), number_format($s['outstanding'], 2), $c->status_label,
             ];
         })->all();
 
-        return ['columns' => ['Case No', 'Date', 'Member', 'Deceased', 'Category', 'Rate', 'Invoiced', 'Expected', 'Collected', 'Outstanding', 'Status'],
-            'rows' => $rows, 'numeric' => [5, 7, 8, 9], 'filters' => ['status' => WelfareCase::STATUSES]];
+        return ['columns' => ['Case No', 'Date', 'Member', 'Deceased', 'Category', 'Rate', 'Invoiced', 'Expected', 'Collected', 'Office', 'Transport', 'Welfare', 'Disbursed', 'Outstanding', 'Status'],
+            'rows' => $rows, 'numeric' => [5, 7, 8, 9, 10, 11, 12, 13], 'filters' => ['status' => WelfareCase::STATUSES]];
     }
 
     private function caseContributions($caseId): array
@@ -139,14 +154,20 @@ class ReportService
         $subtitle = 'Select a case';
         if ($caseId && $case = WelfareCase::find($caseId)) {
             $subtitle = $case->case_no.' - '.$case->deceased_name.' ('.$case->category_label.')';
-            $rows = $case->invoices()->with('member')->get()->sortBy(fn ($i) => $i->member->full_name)->map(fn ($i) => [
-                $i->member->member_no, $i->member->full_name, $i->member->phone, $i->invoice_no, number_format((float) $i->amount, 2),
-                number_format((float) $i->amount_paid, 2), number_format($i->outstanding, 2), $i->status_label,
-            ])->values()->all();
+            $rows = $case->invoices()->with('member')->get()->sortBy(fn ($i) => $i->member->full_name)->map(function ($i) use ($case) {
+                $sp = $i->status === 'cancelled' ? ['office' => 0, 'transport' => 0, 'welfare' => 0]
+                    : WelfareCase::split((float) $i->amount_paid, (float) $case->office_share, (float) $case->transport_share);
+
+                return [
+                    $i->member->member_no, $i->member->full_name, $i->member->phone, $i->invoice_no, number_format((float) $i->amount, 2),
+                    number_format((float) $i->amount_paid, 2), number_format($sp['office'], 2), number_format($sp['transport'], 2), number_format($sp['welfare'], 2),
+                    number_format($i->outstanding, 2), $i->status_label,
+                ];
+            })->values()->all();
         }
 
-        return ['columns' => ['Member No', 'Member', 'Phone', 'Invoice', 'Amount', 'Paid', 'Outstanding', 'Status'],
-            'rows' => $rows, 'numeric' => [4, 5, 6], 'cases' => $cases, 'subtitle' => $subtitle];
+        return ['columns' => ['Member No', 'Member', 'Phone', 'Invoice', 'Amount', 'Paid', 'Office', 'Transport', 'Welfare', 'Outstanding', 'Status'],
+            'rows' => $rows, 'numeric' => [4, 5, 6, 7, 8, 9], 'cases' => $cases, 'subtitle' => $subtitle];
     }
 
     private function paymentStatus($from, $to): array
@@ -218,6 +239,71 @@ class ReportService
         return ['columns' => ['Invoice', 'Date', 'Member', 'Category', 'Title', 'Amount', 'Paid', 'Outstanding', 'Status'], 'rows' => $rows, 'numeric' => [5, 6, 7]];
     }
 
+    private function caseFunds($q): array
+    {
+        $cases = $q->orderByDesc('bereavement_date')->get();
+        $funds = WelfareCase::fundsFor($cases->pluck('id')->all());
+        $rows = $cases->map(function ($c) use ($funds) {
+            $f = $funds[$c->id];
+
+            return [
+                $c->case_no, $c->bereavement_date->format('Y-m-d'), $c->deceased_name,
+                number_format($f['office'], 2), number_format($f['transport'], 2), number_format($f['welfare'], 2),
+                number_format($f['office'] + $f['transport'] + $f['welfare'], 2),
+                number_format($f['welfare_disbursed'], 2), number_format($f['transport_disbursed'], 2),
+                number_format($f['welfare_available'], 2), number_format($f['transport_available'], 2),
+            ];
+        })->all();
+
+        return ['columns' => ['Case No', 'Date', 'Deceased', 'Office collected', 'Transport collected', 'Welfare collected', 'Total collected',
+            'Welfare disbursed', 'Transport disbursed', 'Welfare held', 'Transport held'],
+            'rows' => $rows, 'numeric' => [3, 4, 5, 6, 7, 8, 9, 10]];
+    }
+
+    private function disbursements($q): array
+    {
+        $rows = $q->orderByDesc('disbursement_date')->orderByDesc('id')->get()->map(fn ($d) => [
+            $d->disbursement_date->format('Y-m-d'), $d->reference, $d->welfareCase->case_no, $d->welfareCase->deceased_name, $d->fund_label,
+            $d->recipient, $d->recipient_phone, number_format((float) $d->amount, 2), $d->payment_ref,
+            $d->status === 'voided' ? 'Void: '.$d->void_reason : 'Paid out', $d->remarks, $d->recorder?->name,
+        ])->all();
+
+        return ['columns' => ['Date', 'Ref', 'Case No', 'Deceased', 'Fund', 'Recipient', 'Phone', 'Amount', 'Payment ref', 'Status', 'Remarks', 'Recorded by'],
+            'rows' => $rows, 'numeric' => [7],
+            'filters' => ['fund' => CaseDisbursement::FUNDS, 'status' => ['active' => 'Paid out', 'voided' => 'Void']]];
+    }
+
+    private function officeStatement($from, $to, $type): array
+    {
+        $office = app(OfficeService::class);
+        $st = $office->statement($from, $to, $type ?: null);
+        $rows = [];
+        if ($from) {
+            $rows[] = [$from, '', 'Opening balance', '', '', '', number_format($st['opening'], 2)];
+        }
+        foreach ($st['rows'] as $e) {
+            $rows[] = [$e['date'], $e['reference'], $e['type_label'].($e['category'] ? ' / '.$e['category'] : ''), $e['details'],
+                $e['in'] ? number_format($e['in'], 2) : '', $e['out'] ? number_format($e['out'], 2) : '', number_format($e['balance'], 2)];
+        }
+        $account = $office->account();
+
+        return ['columns' => ['Date', 'Reference', 'Type', 'Details', 'In', 'Out', 'Balance'],
+            'rows' => $rows, 'numeric' => [4, 5, 6],
+            'subtitle' => $account->name.' ('.$account->account_no.') · closing balance '.number_format($st['closing'], 2),
+            'filters' => ['type' => ['case_income' => 'Case income', 'topup' => 'Top-ups', 'expense' => 'Expenses', 'reversal' => 'Reversals']]];
+    }
+
+    private function officeExpenses($q): array
+    {
+        $rows = $q->orderByDesc('transaction_date')->orderByDesc('id')->get()->map(fn ($t) => [
+            $t->transaction_date->format('Y-m-d'), $t->reference, $t->category, $t->description, $t->party, $t->external_ref,
+            number_format((float) $t->amount, 2), $t->reversal ? 'Reversed ('.$t->reversal->reference.')' : 'Posted', $t->recorder?->name,
+        ])->all();
+
+        return ['columns' => ['Date', 'Reference', 'Category', 'Description', 'Paid to', 'Receipt', 'Amount', 'Status', 'Recorded by'],
+            'rows' => $rows, 'numeric' => [6]];
+    }
+
     private function financialSummary($from, $to): array
     {
         $s = app(FinanceService::class)->summary($from, $to);
@@ -234,6 +320,16 @@ class ReportService
             ['Total refunds', number_format($s['refunds'], 2)],
             ['Adjustments (credit)', number_format($s['adjustments_credit'], 2)],
             ['Adjustments (debit)', number_format($s['adjustments_debit'], 2)],
+            ['Case funds, all dates: welfare collected', number_format($s['fund_welfare'], 2)],
+            ['Case funds, all dates: welfare disbursed', number_format($s['welfare_disbursed'], 2)],
+            ['Case funds, all dates: welfare still held', number_format($s['welfare_held'], 2)],
+            ['Case funds, all dates: transport collected', number_format($s['fund_transport'], 2)],
+            ['Case funds, all dates: transport disbursed', number_format($s['transport_disbursed'], 2)],
+            ['Case funds, all dates: transport still held', number_format($s['transport_held'], 2)],
+            ['Office account: income from cases', number_format($s['fund_office'], 2)],
+            ['Office account: top-ups', number_format($s['office_topups'], 2)],
+            ['Office account: expenses', number_format($s['office_expenses'], 2)],
+            ['Office account: balance (as at today)', number_format($s['office_balance'], 2)],
         ];
 
         return ['columns' => ['Item', 'Amount ('.setting('currency', 'KES').')'], 'rows' => $rows, 'numeric' => [1]];

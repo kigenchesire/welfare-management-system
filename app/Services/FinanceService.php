@@ -43,7 +43,22 @@ class FinanceService
 
         $customInvoiced = (float) $range(Invoice::where('type', 'custom')->where('status', '!=', 'cancelled'), 'invoice_date')->sum('amount');
 
+        // Case funds (all dates): how welfare payments were shared out and paid out.
+        $caseIds = \App\Models\WelfareCase::where('status', '!=', 'cancelled')->pluck('id')->all();
+        $funds = collect(\App\Models\WelfareCase::fundsFor($caseIds));
+        $office = app(OfficeService::class)->totals();
+
         return [
+            'fund_welfare' => round($funds->sum('welfare'), 2),
+            'fund_transport' => round($funds->sum('transport'), 2),
+            'fund_office' => round($funds->sum('office'), 2),
+            'welfare_disbursed' => round($funds->sum('welfare_disbursed'), 2),
+            'transport_disbursed' => round($funds->sum('transport_disbursed'), 2),
+            'welfare_held' => round($funds->sum('welfare_available'), 2),
+            'transport_held' => round($funds->sum('transport_available'), 2),
+            'office_balance' => $office['balance'],
+            'office_topups' => $office['topups'],
+            'office_expenses' => $office['expenses'],
             'wallet_balances' => (float) Wallet::sum('balance'),
             'members_in_credit' => Wallet::where('balance', '>', 0)->count(),
             'members_in_debit' => Wallet::where('balance', '<', 0)->count(),

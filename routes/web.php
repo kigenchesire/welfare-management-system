@@ -10,6 +10,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MemberPortalController;
+use App\Http\Controllers\OfficeController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PwaController;
 use App\Http\Controllers\ReportController;
@@ -104,6 +105,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/cases/{case}/cancel', [WelfareCaseController::class, 'cancel'])->name('cases.cancel');
     });
     Route::post('/cases/{case}/payments', [WelfareCaseController::class, 'recordPayment'])->middleware('permission:deposits.record')->name('cases.payments.store');
+    Route::middleware('permission:disbursements.manage')->group(function () {
+        Route::post('/cases/{case}/disbursements', [WelfareCaseController::class, 'disburse'])->name('cases.disburse');
+        Route::post('/disbursements/{disbursement}/void', [WelfareCaseController::class, 'voidDisbursement'])->name('disbursements.void');
+    });
     Route::post('/cases/{case}/remind', [WelfareCaseController::class, 'remind'])->middleware('permission:cases.manage|deposits.record')->name('cases.remind');
     Route::middleware('permission:cases.view')->group(function () {
         Route::get('/cases', [WelfareCaseController::class, 'index'])->name('cases.index');
@@ -137,6 +142,14 @@ Route::middleware(['auth', 'active'])->group(function () {
     });
     Route::post('/wallets/{member}/adjust', [WalletController::class, 'adjust'])->middleware('permission:adjustments.manage')->name('wallets.adjust');
     Route::post('/wallets/low-balance-reminders', [WalletController::class, 'remindLowBalances'])->middleware('permission:deposits.record')->name('wallets.remind');
+    // Office expenditure account
+    Route::get('/office', [OfficeController::class, 'index'])->middleware('permission:office.view')->name('office.index');
+    Route::middleware('permission:office.manage')->group(function () {
+        Route::post('/office/topups', [OfficeController::class, 'topup'])->name('office.topup');
+        Route::post('/office/expenses', [OfficeController::class, 'expense'])->name('office.expense');
+        Route::post('/office/transactions/{transaction}/reverse', [OfficeController::class, 'reverse'])->name('office.reverse');
+        Route::put('/office/account', [OfficeController::class, 'updateAccount'])->name('office.account');
+    });
     Route::get('/finance', FinanceController::class)->middleware('permission:finance.view')->name('finance.summary');
 
     // ---------- Reports (permission checked per report group) ----------

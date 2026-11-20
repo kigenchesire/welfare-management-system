@@ -21,13 +21,21 @@ class DatabaseSeeder extends Seeder
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
+        $added = [];
         foreach (Permissions::names() as $name) {
+            if (! Permission::where('name', $name)->where('guard_name', 'web')->exists()) {
+                $added[] = $name;
+            }
             Permission::findOrCreate($name, 'web');
         }
         foreach (Permissions::defaults() as $roleName => $perms) {
             $role = Role::findOrCreate($roleName, 'web');
             if ($role->wasRecentlyCreated || $roleName === 'Administrator') {
                 $role->syncPermissions($perms);
+            } elseif ($added) {
+                // Permissions introduced by an update go to their default roles;
+                // changes an admin made to existing permissions are left alone.
+                $role->givePermissionTo(array_values(array_intersect($perms, $added)));
             }
         }
 

@@ -69,6 +69,8 @@ class SettingDefinitions
             'contribution_self' => ['financial', 'number', 'Contribution: self (member) case', '1100'],
             'contribution_spouse' => ['financial', 'number', 'Contribution: spouse case', '1100'],
             'contribution_child' => ['financial', 'number', 'Contribution: child case', '1100'],
+            'office_share_per_case' => ['financial', 'number', 'Office expenditure taken first from each member payment on a case', '100'],
+            'transport_share_per_case' => ['financial', 'number', 'Transport taken next from each member payment on a case', '50'],
             'payment_method' => ['financial', 'text', 'Payment method name', 'Cosmopolitan Sacco Paybill'],
             'paybill_number' => ['financial', 'text', 'Paybill number', '000000'],
             'account_instructions' => ['financial', 'text', 'Account number instructions', 'Use your National ID number as the account number'],

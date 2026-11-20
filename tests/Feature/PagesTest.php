@@ -41,7 +41,7 @@ class PagesTest extends TestCase
             route('invoices.index'), route('invoices.show', $invoice), route('invoices.create'),
             route('wallets.index'), route('wallets.show', $m), route('transactions.index'),
             route('payments.index'), route('payments.create'), route('payments.show', $payment),
-            route('finance.summary'), route('reports.index'), route('announcements.index'),
+            route('finance.summary'), route('office.index'), route('reports.index'), route('announcements.index'),
             route('sms.logs'), route('notifications'), route('admin.users'), route('admin.users.create'),
             route('admin.users.edit', $admin), route('admin.roles'), route('admin.audit'),
             route('admin.settings'), route('admin.settings', ['tab' => 'financial']), route('admin.settings', ['tab' => 'sms']),
